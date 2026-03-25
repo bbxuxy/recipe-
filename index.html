@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Luxury POS - Complete VAT & Status</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital@0;1&family=Sarabun:wght@300;400;700&display=swap" rel="stylesheet">
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+    <style>
+        :root { --gold: #c5a028; --black: #1a1a1a; --green: #2ecc71; --red: #e74c3c; --bg: #f8f9fa; }
+        body { font-family: 'Sarabun', sans-serif; background-color: var(--bg); margin: 0; color: var(--black); }
+        .luxury-font { font-family: 'Playfair Display', serif; }
+        .btn-click { transition: transform 0.1s; cursor: pointer; user-select: none; border: none; outline: none; }
+        .btn-click:active { transform: scale(0.96); }
+
+        #notification { position: fixed; top: -150px; left: 50%; transform: translateX(-50%); width: 340px; background: white; padding: 20px; border-radius: 0 0 24px 24px; box-shadow: 0 15px 40px rgba(0,0,0,0.15); z-index: 9999; text-align: center; transition: top 0.6s; cursor: pointer; border-bottom: 5px solid var(--gold); }
+        #notification.show { top: 0; }
+
+        .container { max-width: 500px; margin: 60px auto; padding: 20px; }
+        .top-nav { position: fixed; top: 20px; right: 20px; z-index: 100; }
+        .edit-btn { background: white; padding: 12px; border-radius: 50%; box-shadow: 0 4px 15px rgba(0,0,0,0.08); width: 45px; height: 45px; display: flex; align-items: center; justify-content: center; color: #eee; }
+        
+        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: none; justify-content: center; align-items: center; z-index: 1000; backdrop-filter: blur(6px); }
+        .modal { background: #fff; padding: 30px; border-radius: 28px; width: 85%; max-width: 400px; max-height: 90vh; overflow-y: auto; }
+        
+        input { width: 100%; padding: 14px; margin: 6px 0; border: 1.5px solid #eee; border-radius: 14px; outline: none; }
+        .btn-black { background: var(--black); color: white; padding: 18px; width: 100%; border-radius: 16px; font-weight: bold; }
+        .btn-green { background: var(--green); color: white; padding: 18px; width: 100%; border-radius: 16px; font-weight: bold; }
+        
+        .receipt-card { background: white; padding: 22px; border-radius: 20px; margin-bottom: 15px; border-left: 6px solid var(--gold); box-shadow: 0 4px 12px rgba(0,0,0,0.03); }
+        .status-badge { font-size: 10px; padding: 4px 12px; border-radius: 20px; font-weight: bold; margin-top: 8px; display: inline-block; }
+        .unpaid { background: #fff1f0; color: var(--red); }
+        .paid { background: #e6fcf5; color: var(--green); }
+    </style>
+</head>
+<body>
+
+    <div id="notification" class="btn-click">
+        <div id="notif-msg" style="font-weight: 700; font-size: 14px; line-height: 1.5;"></div>
+        <div style="font-size: 10px; color: #ccc; margin-top: 8px;">TOUCH TO ACTION</div>
+    </div>
+
+    <div class="top-nav"><div class="edit-btn btn-click" onclick="openModal('login-modal')">✎</div></div>
+
+    <div class="container" id="history-page">
+        <h1 class="luxury-font" style="font-size: 36px; margin-bottom: 5px;">Archive</h1>
+        <div id="history-list"></div>
+    </div>
+
+    <div class="container" id="create-page" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+            <h2 class="luxury-font" style="font-size: 28px;">Admin Panel</h2>
+            <div class="btn-click" onclick="togglePages(false)" style="color: #ccc;">✕</div>
+        </div>
+        <button class="btn-black btn-click" onclick="openModal('create-receipt-modal')" style="height: 70px; margin-bottom: 12px;">+ สร้างใบเสร็จ</button>
+        <button class="btn-green btn-click" onclick="openModal('collect-modal')" style="height: 70px;">เรียกเก็บเงิน</button>
+    </div>
+
+    <div id="login-modal" class="overlay"><div class="modal"><h3 class="luxury-font">Staff Access</h3><input type="password" id="staff-pass" placeholder="Password"><button class="btn-black btn-click" onclick="checkLogin()">VERIFY</button></div></div>
+
+    <div id="create-receipt-modal" class="overlay">
+        <div class="modal" style="text-align: left;">
+            <h3 class="luxury-font" style="text-align:center;">New Entry</h3>
+            <input type="text" id="r-shop" placeholder="ชื่อร้านค้า">
+            <input type="text" id="r-cust" placeholder="ชื่อลูกค้า">
+            <input type="text" id="r-member" placeholder="หมายเลขสมาชิก (ถ้ามี)">
+            <div id="items-list" style="max-height: 120px; overflow-y: auto; margin: 10px 0;">
+                <div class="item-row" style="display:flex; gap:5px; margin-bottom:5px;">
+                    <input type="text" placeholder="สินค้า" class="i-name" style="flex:2;"><input type="number" placeholder="Qty" class="i-qty" style="flex:0.6;" oninput="updateVAT()"><input type="number" placeholder="Price" class="i-price" style="flex:1;" oninput="updateVAT()">
+                </div>
+            </div>
+            <button onclick="addItemRow()" style="width:100%; border:1px dashed #ddd; background:none; padding:10px; border-radius:12px; font-size:11px; margin-bottom:10px;">+ ADD ITEM</button>
+            <div style="background:#f9f9f9; padding:15px; border-radius:14px; font-size: 13px; line-height: 1.6;">
+                <div style="display:flex; justify-content:space-between;"><span>ยอดรวม:</span><span id="r-subtotal">0.00</span></div>
+                <div style="display:flex; justify-content:space-between; color: var(--gold);"><span>VAT (7%):</span><span id="r-vat-val">0.00</span></div>
+                <div style="display:flex; justify-content:space-between; font-weight:bold; font-size: 16px; margin-top:5px; border-top:1px solid #eee; padding-top:5px;"><span>ยอดสุทธิ:</span><span id="r-total-preview" style="color:var(--green);">0.00</span></div>
+            </div>
+            <button class="btn-black btn-click" onclick="saveNewReceipt()" style="margin-top:15px;">CONFIRM & BROADCAST</button>
+        </div>
+    </div>
+
+    <div id="collect-modal" class="overlay"><div class="modal"><h3 class="luxury-font">Collection</h3><input type="number" id="c-amount" placeholder="ยอดเงิน (ไม่รวม VAT)"><button class="btn-green btn-click" onclick="confirmCollection()">SEND REQUEST</button></div></div>
+
+    <div id="receipt-view-modal" class="overlay"><div class="modal"><div id="v-shop" class="luxury-font" style="font-size: 26px; color: var(--gold); text-align:center;"></div><div id="v-body" style="text-align: left; margin-top: 20px; font-size: 14px; border-top: 1px dashed #eee; padding-top: 20px;"></div><div id="v-status" style="margin-top:20px; text-align:center;"></div><button class="btn-black btn-click" onclick="closeModal('receipt-view-modal')" style="margin-top: 20px;">CLOSE</button></div></div>
+
+    <script>
+        const rConf = { apiKey: "AIzaSyD7GSadioXJHATRNXZpm_GWppCFp_NDbLU", databaseURL: "https://recipe-d63e2-default-rtdb.firebaseio.com/" };
+        const kConf = { apiKey: "AIzaSyBofiWDW36lE8jmYeVFdIyNkBW7uYJ67YY", databaseURL: "https://sim-bank-b0e8c-default-rtdb.firebaseio.com/" };
+        const dbR = firebase.initializeApp(rConf, "r").database();
+        const dbK = firebase.initializeApp(kConf, "k").database();
+
+        let currentNotifData = null;
+        let allReceipts = {};
+
+        function checkLogin() { if(document.getElementById('staff-pass').value === "18112012") { closeModal('login-modal'); togglePages(true); } }
+        function togglePages(isCreate) { document.getElementById('history-page').style.display = isCreate ? 'none' : 'block'; document.getElementById('create-page').style.display = isCreate ? 'block' : 'none'; }
+        function openModal(id) { document.getElementById(id).style.display = 'flex'; }
+        function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+        function addItemRow() {
+            const div = document.createElement('div'); div.className = "item-row"; div.style = "display:flex; gap:5px; margin-bottom:5px;";
+            div.innerHTML = `<input type="text" placeholder="สินค้า" class="i-name" style="flex:2;"><input type="number" placeholder="Qty" class="i-qty" style="flex:0.6;" oninput="updateVAT()"><input type="number" placeholder="Price" class="i-price" style="flex:1;" oninput="updateVAT()">`;
+            document.getElementById('items-list').appendChild(div);
+        }
+
+        function updateVAT() {
+            let s = 0; document.querySelectorAll('.item-row').forEach(r => { s += (parseFloat(r.querySelector('.i-qty').value) || 0) * (parseFloat(r.querySelector('.i-price').value) || 0); });
+            const v = s * 0.07;
+            document.getElementById('r-subtotal').innerText = s.toLocaleString(undefined, {minimumFractionDigits: 2});
+            document.getElementById('r-vat-val').innerText = v.toLocaleString(undefined, {minimumFractionDigits: 2});
+            document.getElementById('r-total-preview').innerText = (s + v).toLocaleString(undefined, {minimumFractionDigits: 2});
+        }
+
+        function saveNewReceipt() {
+            const shop = document.getElementById('r-shop').value || "Store";
+            const member = document.getElementById('r-member').value || "ไม่พบ";
+            let items = [], sum = 0;
+            document.querySelectorAll('.item-row').forEach(r => {
+                const n = r.querySelector('.i-name').value, q = parseFloat(r.querySelector('.i-qty').value) || 0, p = parseFloat(r.querySelector('.i-price').value) || 0;
+                if(n && q > 0) { items.push({n, q, p}); sum += (q * p); }
+            });
+            if(items.length === 0) return;
+            const vat = sum * 0.07, total = (sum + vat).toFixed(2);
+            const id = Date.now();
+            dbR.ref('receipts/' + id).set({ id, shop, customer: document.getElementById('r-cust').value, member, items, subtotal: sum, vat: vat, total: parseFloat(total), status: 'unpaid', date: new Date().toLocaleString('th-TH') }).then(() => {
+                dbR.ref('global_notif').set({ type: 'new_receipt', shop, total: parseFloat(total).toLocaleString(), id, ts: Date.now() });
+                closeModal('create-receipt-modal');
+            });
+        }
+
+        function confirmCollection() {
+            const amt = parseFloat(document.getElementById('c-amount').value) || 0; if(amt <= 0) return;
+            const total = (amt * 1.07).toLocaleString();
+            dbR.ref('global_notif').set({ type: 'collect', total, ts: Date.now() });
+            closeModal('collect-modal');
+        }
+
+        function showReceipt(id) {
+            dbR.ref('receipts/' + id).once('value', s => {
+                const r = s.val(); if(!r) return;
+                document.getElementById('v-shop').innerText = r.shop;
+                let h = `<small style="color:#aaa;">${r.date}</small><br><b>ลูกค้า:</b> ${r.customer || 'ทั่วไป'}<br><b>สมาชิก:</b> ${r.member}<hr style="border:none; border-top:1px dashed #eee; margin:20px 0;">`;
+                r.items.forEach(i => h += `<div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span>${i.n} (x${i.q})</span><span>${(i.q*i.p).toLocaleString()} ฿</span></div>`);
+                h += `<hr style="border:none; border-top:1px solid #f9f9f9; margin:15px 0;">`;
+                h += `<div style="display:flex; justify-content:space-between; font-size:12px;"><span>ยอดรวม</span><span>${parseFloat(r.subtotal).toLocaleString()} ฿</span></div>`;
+                h += `<div style="display:flex; justify-content:space-between; font-size:12px; color:var(--gold);"><span>ภาษีมูลค่าเพิ่ม (VAT 7%)</span><span>${parseFloat(r.vat).toLocaleString()} ฿</span></div>`;
+                h += `<div style="display:flex; justify-content:space-between; font-weight:bold; margin-top:10px; font-size:18px; color:var(--green);"><span>ยอดสุทธิ</span><span>${parseFloat(r.total).toLocaleString()} ฿</span></div>`;
+                document.getElementById('v-body').innerHTML = h;
+                const statusHtml = r.status === 'paid' ? '<div class="status-badge paid">ชำระเงินเสร็จสิ้นผ่านธนาคาร</div>' : '<div class="status-badge unpaid">ยังไม่ได้ชำระ</div>';
+                document.getElementById('v-status').innerHTML = statusHtml;
+                openModal('receipt-view-modal');
+            });
+        }
+
+        dbR.ref('global_notif').on('value', s => {
+            const data = s.val(); if(!data || data.ts < Date.now() - 8000) return;
+            currentNotifData = data;
+            const n = document.getElementById('notification');
+            const msg = document.getElementById('notif-msg');
+            if(data.type === 'collect') { msg.innerHTML = `ยอดที่ท่านต้องชำระ <span style="color:var(--green);">${data.total} ฿</span><br><span style="color:var(--gold);">โปรดโอนเข้าบัญชี 0000</span>`; n.style.borderBottom = "5px solid var(--green)"; }
+            else if(data.type === 'new_receipt') { msg.innerHTML = `คุณใช้จ่ายกับร้านค้า <span style="color:var(--gold);">${data.shop}</span><br>เป็นจำนวนเงิน <span style="color:var(--green);">${data.total} ฿</span> ขอบคุณที่ใช้บริการ`; n.style.borderBottom = "5px solid var(--gold)"; }
+            else if(data.type === 'paid') { msg.innerHTML = `คุณชำระเงิน <span style="color:var(--green);">${data.total} ฿</span><br>ขอบคุณที่ใช้บริการ`; n.style.borderBottom = "5px solid #3498db"; }
+            n.classList.add('show'); setTimeout(() => n.classList.remove('show'), 8000);
+        });
+
+        document.getElementById('notification').onclick = () => {
+            if(!currentNotifData) return;
+            if(currentNotifData.type === 'collect') window.location.href = "https://bbxuxy.github.io/Bank/";
+            else if(currentNotifData.type === 'new_receipt') showReceipt(currentNotifData.id);
+            document.getElementById('notification').classList.remove('show');
+        };
+
+        dbR.ref('receipts').on('value', s => {
+            const list = document.getElementById('history-list'); list.innerHTML = "";
+            allReceipts = s.val() || {};
+            Object.values(allReceipts).reverse().forEach(r => {
+                const div = document.createElement('div'); div.className = "receipt-card btn-click";
+                div.onclick = () => showReceipt(r.id);
+                const statusLabel = r.status === 'paid' ? '<span class="status-badge paid">ชำระแล้ว</span>' : '<span class="status-badge unpaid">ยังไม่ชำระ</span>';
+                div.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center;"><div><b>${r.shop}</b><br>${statusLabel}</div><b style="color:var(--green);">${parseFloat(r.total).toLocaleString()} ฿</b></div>`;
+                list.appendChild(div);
+            });
+        });
+
+        dbK.ref('logs').limitToLast(1).on('child_added', s => {
+            const log = s.val();
+            if(log && log.time > (Date.now() - 5000) && log.to === "0000") {
+                const paidAmt = parseFloat(log.amount);
+                Object.values(allReceipts).forEach(r => {
+                    if(r.status === 'unpaid' && Math.abs(r.total - paidAmt) < 0.01) {
+                        dbR.ref('receipts/' + r.id).update({ status: 'paid' });
+                    }
+                });
+                dbR.ref('global_notif').set({ type: 'paid', total: paidAmt.toLocaleString(), ts: Date.now() });
+            }
+        });
+    </script>
+</body>
+</html>

@@ -186,7 +186,7 @@
             const msg = document.getElementById('notif-msg');
 
             if(data.type === 'collect') {
-                msg.innerHTML = `ยอดที่ท่านต้องชำระ <span style="color:var(--green);">${data.total} ฿</span><br><span style="color:var(--gold);">โปรดโอนเข้าบัญชี 0000</span>`;
+                msg.innerHTML = `ขอบคุณที่ชำระเงิน <span style="color:var(--green);">${data.total} ฿</span><br><span style="color:var(--gold);">โอกาสหน้าเชิญใหม่ครับ</span>`;
                 n.style.borderBottom = "5px solid var(--green)";
             } else if(data.type === 'new_receipt') {
                 msg.innerHTML = `คุณใช้จ่ายกับร้านค้า <span style="color:var(--gold);">${data.shop}</span><br>เป็นจำนวนเงิน <span style="color:var(--green);">${data.total} ฿</span> ขอบคุณที่ใช้บริการ`;
